@@ -37,6 +37,7 @@ class Database:
             chat_history TEXT,
             chat_context TEXT,
             timestamp TIMESTAMP,
+            is_favorite BOOLEAN DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
         ''')
@@ -108,57 +109,38 @@ class Database:
     def save_user_sessions(self, user_id, sessions):
         """保存用户的会话数据"""
         try:
-            conn = self.get_connection()
-            c = conn.cursor()
+            # 将会话数据转换为JSON字符串
+            sessions_json = json.dumps(sessions, ensure_ascii=False)
             
-            # 先删除该用户的所有现有会话
-            c.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
-            
-            # 插入新的会话数据
-            for session_id, session_data in sessions.items():
-                c.execute('''
-                INSERT INTO sessions (user_id, session_id, title, chat_history, 
-                                    chat_context, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    user_id,
-                    session_id,
-                    session_data['title'],
-                    json.dumps(session_data['chat_history']),
-                    json.dumps(session_data['chat_context']),
-                    session_data['timestamp']
-                ))
-            
-            conn.commit()
-            return True, "会话保存成功"
+            # 更新数据库中的会话数据
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO user_sessions (user_id, sessions)
+                    VALUES (?, ?)
+                """, (user_id, sessions_json))
+                conn.commit()
+            return True
         except Exception as e:
-            return False, f"保存失败: {str(e)}"
-        finally:
-            conn.close()
+            print(f"保存会话数据时出错: {str(e)}")
+            return False
     
     def load_user_sessions(self, user_id):
         """加载用户的会话数据"""
         try:
-            conn = self.get_connection()
-            c = conn.cursor()
-            
-            c.execute('''
-            SELECT session_id, title, chat_history, chat_context, timestamp 
-            FROM sessions WHERE user_id = ?
-            ''', (user_id,))
-            
-            sessions = {}
-            for row in c.fetchall():
-                sessions[row[0]] = {
-                    'title': row[1],
-                    'chat_history': json.loads(row[2]),
-                    'chat_context': json.loads(row[3]),
-                    'timestamp': row[4]
-                }
-            
-            return sessions
-        finally:
-            conn.close()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT sessions FROM user_sessions WHERE user_id = ?
+                """, (user_id,))
+                result = cursor.fetchone()
+                
+                if result and result[0]:
+                    return json.loads(result[0])
+                return None
+        except Exception as e:
+            print(f"加载会话数据时出错: {str(e)}")
+            return None
     
     def save_user_settings(self, user_id, api_key, api_base, model):
         """保存用户的API设置"""
