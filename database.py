@@ -1,4 +1,3 @@
-import sqlite3
 import psycopg2
 from psycopg2.extras import Json, DictCursor
 import streamlit as st
@@ -9,7 +8,6 @@ import bcrypt
 class Database:
     def __init__(self):
         try:
-            # 使用直接连接字符串
             self.connection_string = st.secrets["postgres"]["connection_string"]
             print("数据库连接字符串已加载")
         except Exception as e:
@@ -18,147 +16,143 @@ class Database:
 
     def get_connection(self):
         try:
-            conn = psycopg2.connect(self.connection_string)
-            return conn
+            return psycopg2.connect(self.connection_string)
         except Exception as e:
             print(f"获取数据库连接时出错: {str(e)}")
             raise e
 
-    def test_connection(self):
-        """测试数据库连接"""
-        try:
-            print("开始测试数据库连接...")
-            conn = self.get_connection()
-            with conn.cursor() as c:
-                print("执行测试查询...")
-                c.execute('SELECT version()')
-                version = c.fetchone()
-                print(f"数据库连接成功! PostgreSQL 版本: {version[0]}")
-                return True
-        except Exception as e:
-            print(f"数据库连接测试失败: {str(e)}")
-            return False
-        finally:
-            if 'conn' in locals():
-                conn.close()
-                print("数据库连接已关闭")
-
-    def __init__(self, db_file="chat_app.db"):
-        self.db_file = db_file
-        self.init_db()
-    
-    def get_connection(self):
-        return sqlite3.connect(self.db_file)
-    
-    def init_db(self):
-        """初始化数据库表"""
-        conn = self.get_connection()
-        c = conn.cursor()
-        
-        # 创建用户表
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            is_admin BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        
-        # 创建会话表
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            session_id TEXT NOT NULL,
-            title TEXT,
-            chat_history TEXT,
-            chat_context TEXT,
-            timestamp TIMESTAMP,
-            is_favorite BOOLEAN DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-        ''')
-        
-        # 创建用户设置表
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS user_settings (
-            user_id INTEGER PRIMARY KEY,
-            api_key TEXT,
-            api_base TEXT,
-            model TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-        ''')
-        
-        # 检查是否存在默认管理员账户
-        c.execute('SELECT 1 FROM users WHERE username = "admin"')
-        if not c.fetchone():
-            # 创建默认管理员账户，密码为 "admin123"
-            hashed = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt())
-            c.execute('''
-            INSERT INTO users (username, password, is_admin)
-            VALUES (?, ?, 1)
-            ''', ("admin", hashed.decode('utf-8')))
-        
-        conn.commit()
-        conn.close()
-    
     def register_user(self, username, password, is_admin=False):
         """注册新用户"""
+        conn = None
         try:
             conn = self.get_connection()
-            with conn.cursor() as c:
-                # 检查用户名是否已存在
-                c.execute('SELECT 1 FROM users WHERE username = %s', (username,))
-                if c.fetchone():
-                    return False, "用户名已存在"
-                
-                # 对密码进行加密
-                hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-                
-                # 插入新用户
-                c.execute("""
-                    INSERT INTO users (username, password, is_admin) 
-                    VALUES (%s, %s, %s) 
-                    RETURNING id
-                """, (username, hashed.decode('utf-8'), is_admin))
-                
-                user_id = c.fetchone()[0]
-                conn.commit()
-                return True, "注册成功"
+            cursor = conn.cursor()
+            
+            # 检查用户名是否已存在
+            cursor.execute('SELECT 1 FROM users WHERE username = %s', (username,))
+            if cursor.fetchone():
+                return False, "用户名已存在"
+            
+            # 对密码进行加密
+            hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            
+            # 插入新用户
+            cursor.execute("""
+                INSERT INTO users (username, password, is_admin) 
+                VALUES (%s, %s, %s) 
+                RETURNING id
+            """, (username, hashed.decode('utf-8'), is_admin))
+            
+            user_id = cursor.fetchone()[0]
+            conn.commit()
+            return True, "注册成功"
+            
         except Exception as e:
+            if conn:
+                conn.rollback()
             print(f"注册用户时出错: {str(e)}")
             return False, f"注册失败: {str(e)}"
         finally:
-            conn.close()
-    
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
     def verify_user(self, username, password):
         """验证用户登录"""
+        conn = None
         try:
             conn = self.get_connection()
-            with conn.cursor(cursor_factory=DictCursor) as c:
-                # 查询用户
-                c.execute("""
-                    SELECT id, password, is_admin 
-                    FROM users 
-                    WHERE username = %s
-                """, (username,))
-                
-                result = c.fetchone()
-                
-                if result:
-                    stored_password = result['password'].encode('utf-8')
-                    if bcrypt.checkpw(password.encode('utf-8'), stored_password):
-                        return True, result['id']
-                return False, None
-                
+            cursor = conn.cursor(cursor_factory=DictCursor)
+            
+            # 查询用户
+            cursor.execute("""
+                SELECT id, password, is_admin 
+                FROM users 
+                WHERE username = %s
+            """, (username,))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                stored_password = result['password'].encode('utf-8')
+                if bcrypt.checkpw(password.encode('utf-8'), stored_password):
+                    return True, result['id']
+            return False, None
+            
         except Exception as e:
             print(f"验证用户时出错: {str(e)}")
             return False, None
         finally:
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def create_admin_if_not_exists(self):
+        """确保管理员账户存在"""
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # 检查管理员是否存在
+            cursor.execute('SELECT 1 FROM users WHERE username = %s', ('admin',))
+            if not cursor.fetchone():
+                # 创建默认管理员账户
+                hashed = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt())
+                cursor.execute("""
+                    INSERT INTO users (username, password, is_admin) 
+                    VALUES (%s, %s, %s)
+                """, ('admin', hashed.decode('utf-8'), True))
+                conn.commit()
+                print("已创建默认管理员账户")
+                
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            print(f"创建管理员账户时出错: {str(e)}")
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
+    def test_connection(self):
+        """测试数据库连接"""
+        conn = None
+        try:
+            print("开始测试数据库连接...")
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            print("执行测试查询...")
+            cursor.execute('SELECT version()')
+            version = cursor.fetchone()
+            print(f"数据库连接成功! PostgreSQL 版本: {version[0]}")
+            
+            # 测试表是否存在
+            cursor.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+            """)
+            tables = cursor.fetchall()
+            print("现有数据表:")
+            for table in tables:
+                print(f"- {table[0]}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"数据库连接测试失败: {str(e)}")
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+            print("数据库连接已关闭")
     
     def save_user_sessions(self, user_id, sessions):
         """保存用户的会话数据"""
@@ -349,26 +343,5 @@ class Database:
         except Exception as e:
             print(f"获取用户设置出错: {str(e)}")
             return {}
-        finally:
-            conn.close()
-    
-    def create_admin_if_not_exists(self):
-        """确保管理员账户存在"""
-        try:
-            conn = self.get_connection()
-            with conn.cursor() as c:
-                # 检查管理员是否存在
-                c.execute('SELECT 1 FROM users WHERE username = %s', ('admin',))
-                if not c.fetchone():
-                    # 创建默认管理员账户
-                    hashed = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt())
-                    c.execute("""
-                        INSERT INTO users (username, password, is_admin) 
-                        VALUES (%s, %s, %s)
-                    """, ('admin', hashed.decode('utf-8'), True))
-                    conn.commit()
-                    print("已创建默认管理员账户")
-        except Exception as e:
-            print(f"创建管理员账户时出错: {str(e)}")
         finally:
             conn.close() 
