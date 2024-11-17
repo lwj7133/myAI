@@ -664,7 +664,12 @@ def process_document(file):
     file_extension = file.name.lower().split('.')[-1]
     
     try:
-        if file_extension == 'pdf':
+        # 处理代码文件 - 添加html相关文件类型
+        if file_extension in ['py', 'c', 'cpp', 'h', 'hpp', 'm', 'swift', 'java', 'js', 'ts','html', 'htm', 'css', 'scss', 'less', 'jsx', 'tsx', 'vue', 'php']:  # 添加web文件类型
+            code_content = file.getvalue().decode('utf-8')
+            return code_content
+            
+        elif file_extension == 'pdf':
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.getvalue()))
             text_content = ""
             for page in pdf_reader.pages:
@@ -715,9 +720,10 @@ with st.form(key="chat_form", clear_on_submit=True):
     
     uploaded_file = st.file_uploader(
         "上传文件（小于50MB）", 
-        type=["png", "jpg", "jpeg", "pdf", "doc", "docx"], 
+        type=["png", "jpg", "jpeg", "pdf", "doc", "docx", "py", "c", "cpp", "h", "hpp", "m", "swift", "java", "js", "ts",
+              "html", "htm", "css", "scss", "less", "jsx", "tsx", "vue", "php"],  # 添加web相关文件类型
         key="file_uploader",
-        help="支持的文件类型：图片(PNG/JPG)、PDF文档、Word文档(DOC/DOCX)"
+        help="支持的文件类型：图片(PNG/JPG)、文档(PDF/DOC/DOCX)、代码文件(PY/C/CPP/H/M等)、网页文件(HTML/CSS/JS等)"
     )
     st.markdown('<style>div[data-testid="stFileUploader"] {margin-bottom: -15px;}</style>', unsafe_allow_html=True)
 
@@ -752,6 +758,41 @@ if chat_submit_button:
                         {"type": "image_url", "image_url": {"url": image_url}}
                     ]
                 })
+            elif file_extension in ['py', 'c', 'cpp', 'h', 'hpp', 'm', 'swift', 'java', 'js', 'ts',
+                                   'html', 'htm', 'css', 'scss', 'less', 'jsx', 'tsx', 'vue', 'php']:  # 添加web文件类型
+                code_content = process_document(uploaded_file)
+                if code_content:
+                    # 根据文件类型选择合适的语言标识符
+                    lang_identifier = {
+                        'html': 'html',
+                        'htm': 'html',
+                        'css': 'css',
+                        'scss': 'scss',
+                        'less': 'less',
+                        'js': 'javascript',
+                        'jsx': 'jsx',
+                        'tsx': 'tsx',
+                        'vue': 'vue',
+                        'php': 'php'
+                    }.get(file_extension, file_extension)
+                    
+                    prompt = f"""请分析以下{file_extension.upper()}代码：\n\n```{lang_identifier}\n{code_content}\n```\n\n"""
+                    if user_input:
+                        prompt += f"用户的具体问题是：{user_input}"
+                    else:
+                        prompt += "请分析代码的主要功能、结构和可能存在的问题，并提供改进建议。"
+                    
+                    # 保存到会话历史
+                    st.session_state.sessions[st.session_state.current_session_id]['chat_history'].append({
+                        'type': 'document',
+                        'filename': uploaded_file.name,
+                        'content': code_content,
+                        'user_input': user_input if user_input else ''
+                    })
+                    st.session_state.sessions[st.session_state.current_session_id]['chat_context'].append({
+                        "role": "user", 
+                        "content": prompt
+                    })
             else:
                 document_content = process_document(uploaded_file)
                 if document_content:
