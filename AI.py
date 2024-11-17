@@ -154,9 +154,31 @@ if not st.session_state.user_id:
                     if login_username and login_password:
                         success, user_id = db.verify_user(login_username, login_password)
                         if success:
-                            # ... 登录成功后的处理逻辑保持不变 ...
                             st.session_state.user_id = user_id
                             st.session_state.username = login_username
+                            
+                            # 加载用户的会话数据
+                            saved_sessions = db.load_user_sessions(user_id)
+                            if saved_sessions:
+                                st.session_state.sessions = saved_sessions
+                            else:
+                                st.session_state.sessions = {
+                                    'default': {
+                                        'chat_history': [],
+                                        'chat_context': [],
+                                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        'title': '新会话',
+                                        'is_favorite': False
+                                    }
+                                }
+                            
+                            # 加载用户设置
+                            settings = db.load_user_settings(user_id)
+                            if settings:
+                                st.session_state.api_key = settings.get('api_key', "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6")
+                                st.session_state.api_base = settings.get('api_base', "https://api.tu-zi.com")
+                                st.session_state.model = settings.get('model', "gpt-4o")
+                            
                             st.rerun()
                         else:
                             st.error("❌ 用户名或密码错误")
