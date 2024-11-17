@@ -206,43 +206,63 @@ class Database:
         finally:
             conn.close()
     
-    def save_user_settings(self, user_id, api_key, api_base, model):
-        """保存用户的API设置"""
+    def save_user_settings(self, user_id, settings):
+        """保存用户设置"""
+        conn = None
         try:
             conn = self.get_connection()
-            c = conn.cursor()
+            cursor = conn.cursor()
             
-            c.execute('''
-            INSERT OR REPLACE INTO user_settings (user_id, api_key, api_base, model)
-            VALUES (?, ?, ?, ?)
-            ''', (user_id, api_key, api_base, model))
+            cursor.execute("""
+                INSERT INTO user_settings (user_id, api_key, api_base, model)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) 
+                DO UPDATE SET 
+                    api_key = EXCLUDED.api_key,
+                    api_base = EXCLUDED.api_base,
+                    model = EXCLUDED.model,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (user_id, settings.get('api_key'), settings.get('api_base'), settings.get('model')))
             
             conn.commit()
-            return True, "设置保存成功"
+            return True
         except Exception as e:
-            return False, f"保存失败: {str(e)}"
+            if conn:
+                conn.rollback()
+            print(f"保存用户设置时出错: {str(e)}")
+            return False
         finally:
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
     
     def load_user_settings(self, user_id):
-        """加载用户的API设置"""
+        """加载用户设置"""
+        conn = None
         try:
             conn = self.get_connection()
-            c = conn.cursor()
+            cursor = conn.cursor(cursor_factory=DictCursor)
             
-            c.execute('SELECT api_key, api_base, model FROM user_settings WHERE user_id = ?',
-                     (user_id,))
-            result = c.fetchone()
+            cursor.execute("""
+                SELECT api_key, api_base, model 
+                FROM user_settings 
+                WHERE user_id = %s
+            """, (user_id,))
             
+            result = cursor.fetchone()
             if result:
-                return {
-                    'api_key': result[0],
-                    'api_base': result[1],
-                    'model': result[2]
-                }
-            return None
+                return dict(result)
+            return {}
+            
+        except Exception as e:
+            print(f"加载用户设置时出错: {str(e)}")
+            return {}
         finally:
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
     
     def verify_admin(self, user_id):
         """验证用户是否为管理员"""
