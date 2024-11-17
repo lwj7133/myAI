@@ -1,3 +1,4 @@
+import sqlite3
 import psycopg2
 from psycopg2.extras import Json, DictCursor
 import streamlit as st
