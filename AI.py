@@ -8,6 +8,13 @@ from database import Database
 import bcrypt
 import sys
 
+# 配置页面
+st.set_page_config(
+    page_title="AI Chat",
+    page_icon="🤖",
+    layout="wide"
+)
+
 # 显示Python版本和环境信息
 st.sidebar.write(f"Python 版本: {sys.version}")
 
@@ -21,27 +28,14 @@ except Exception as e:
 
 # 添加数据库测试按钮
 if st.sidebar.button("测试数据库连接"):
-    try:
-        if db.test_connection():
-            st.sidebar.success("✅ 数据库连接成功！")
-            
-            # 测试数据库操作
-            conn = db.get_connection()
-            with conn.cursor() as c:
-                # 测试用户表
-                c.execute("SELECT COUNT(*) FROM users")
-                user_count = c.fetchone()[0]
-                st.sidebar.write(f"用户表中的记录数: {user_count}")
-                
-                # 测试会话表
-                c.execute("SELECT COUNT(*) FROM sessions")
-                session_count = c.fetchone()[0]
-                st.sidebar.write(f"会话表中的记录数: {session_count}")
-            conn.close()
-        else:
-            st.sidebar.error("❌ 数据库连接失败！")
-    except Exception as e:
-        st.sidebar.error(f"测试连接时出错: {str(e)}")
+    with st.spinner("正在测试数据库连接..."):
+        try:
+            if db.test_connection():
+                st.sidebar.success("✅ 数据库连接成功！")
+            else:
+                st.sidebar.error("❌ 数据库连接失败！")
+        except Exception as e:
+            st.sidebar.error(f"测试连接时出错: {str(e)}")
 
 # 确保所需的表都已创建
 try:
@@ -63,13 +57,6 @@ try:
     conn.close()
 except Exception as e:
     st.error(f"初始化数据库表时出错: {str(e)}")
-
-# 设置页面配置，使用机器人emoji作为图标
-st.set_page_config(
-    page_title="Cookie-AI智能助手",
-    page_icon="🤖",  # 使用机器人emoji作为图标
-    layout="wide"
-)
 
 # 在st.set_page_config之后添加会话状态初始化
 if 'user_id' not in st.session_state:
@@ -731,7 +718,7 @@ with st.form(key="chat_form", clear_on_submit=True):
             "输入问题:", 
             key="user_input", 
             label_visibility="collapsed", 
-            placeholder="有什么我可以帮你的吗？"
+            placeholder="有什么我可以帮你��吗？"
         )
     
     with col2:
