@@ -1,158 +1,110 @@
-import psycopg2
-from psycopg2.extras import Json, DictCursor
-import streamlit as st
+import sqlite3
+import bcrypt
 from datetime import datetime
 import json
-import bcrypt
 
 class Database:
-    def __init__(self):
-        try:
-            self.connection_string = st.secrets["postgres"]["connection_string"]
-            print("数据库连接字符串已加载")
-        except Exception as e:
-            print(f"初始化数据库时出错: {str(e)}")
-            raise e
-
+    def __init__(self, db_file="chat_app.db"):
+        self.db_file = db_file
+        self.init_db()
+    
     def get_connection(self):
-        try:
-            return psycopg2.connect(self.connection_string)
-        except Exception as e:
-            print(f"获取数据库连接时出错: {str(e)}")
-            raise e
-
-    def register_user(self, username, password, is_admin=False):
+        return sqlite3.connect(self.db_file)
+    
+    def init_db(self):
+        """初始化数据库表"""
+        conn = self.get_connection()
+        c = conn.cursor()
+        
+        # 创建用户表
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            is_admin BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        
+        # 创建会话表
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            session_id TEXT NOT NULL,
+            title TEXT,
+            chat_history TEXT,
+            chat_context TEXT,
+            timestamp TIMESTAMP,
+            is_favorite BOOLEAN DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        ''')
+        
+        # 创建用户设置表
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id INTEGER PRIMARY KEY,
+            api_key TEXT,
+            api_base TEXT,
+            model TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        ''')
+        
+        # 检查是否存在默认管理员账户
+        c.execute('SELECT 1 FROM users WHERE username = "admin"')
+        if not c.fetchone():
+            # 创建默认管理员账户，密码为 "admin123"
+            hashed = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt())
+            c.execute('''
+            INSERT INTO users (username, password, is_admin)
+            VALUES (?, ?, 1)
+            ''', ("admin", hashed.decode('utf-8')))
+        
+        conn.commit()
+        conn.close()
+    
+    def register_user(self, username, password):
         """注册新用户"""
-        conn = None
         try:
             conn = self.get_connection()
-            cursor = conn.cursor()
+            c = conn.cursor()
             
             # 检查用户名是否已存在
-            cursor.execute('SELECT 1 FROM users WHERE username = %s', (username,))
-            if cursor.fetchone():
+            c.execute('SELECT 1 FROM users WHERE username = ?', (username,))
+            if c.fetchone():
                 return False, "用户名已存在"
             
             # 对密码进行加密
             hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
             
             # 插入新用户
-            cursor.execute("""
-                INSERT INTO users (username, password, is_admin) 
-                VALUES (%s, %s, %s) 
-                RETURNING id
-            """, (username, hashed.decode('utf-8'), is_admin))
+            c.execute('INSERT INTO users (username, password) VALUES (?, ?)',
+                     (username, hashed.decode('utf-8')))
             
-            user_id = cursor.fetchone()[0]
             conn.commit()
             return True, "注册成功"
-            
         except Exception as e:
-            if conn:
-                conn.rollback()
-            print(f"注册用户时出错: {str(e)}")
             return False, f"注册失败: {str(e)}"
         finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-
+            conn.close()
+    
     def verify_user(self, username, password):
         """验证用户登录"""
-        conn = None
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=DictCursor)
+            c = conn.cursor()
             
-            # 查询用户
-            cursor.execute("""
-                SELECT id, password, is_admin 
-                FROM users 
-                WHERE username = %s
-            """, (username,))
+            c.execute('SELECT id, password FROM users WHERE username = ?', (username,))
+            result = c.fetchone()
             
-            result = cursor.fetchone()
-            
-            if result:
-                stored_password = result['password'].encode('utf-8')
-                if bcrypt.checkpw(password.encode('utf-8'), stored_password):
-                    return True, result['id']
-            return False, None
-            
-        except Exception as e:
-            print(f"验证用户时出错: {str(e)}")
+            if result and bcrypt.checkpw(password.encode('utf-8'), result[1].encode('utf-8')):
+                return True, result[0]  # 返回用户ID
             return False, None
         finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-
-    def create_admin_if_not_exists(self):
-        """确保管理员账户存在"""
-        conn = None
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # 检查管理员是否存在
-            cursor.execute('SELECT 1 FROM users WHERE username = %s', ('admin',))
-            if not cursor.fetchone():
-                # 创建默认管理员账户
-                hashed = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt())
-                cursor.execute("""
-                    INSERT INTO users (username, password, is_admin) 
-                    VALUES (%s, %s, %s)
-                """, ('admin', hashed.decode('utf-8'), True))
-                conn.commit()
-                print("已创建默认管理员账户")
-                
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            print(f"创建管理员账户时出错: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-
-    def test_connection(self):
-        """测试数据库连接"""
-        conn = None
-        try:
-            print("开始测试数据库连接...")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            print("执行测试查询...")
-            cursor.execute('SELECT version()')
-            version = cursor.fetchone()
-            print(f"数据库连接成功! PostgreSQL 版本: {version[0]}")
-            
-            # 测试表是否存在
-            cursor.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-            """)
-            tables = cursor.fetchall()
-            print("现有数据表:")
-            for table in tables:
-                print(f"- {table[0]}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"数据库连接测试失败: {str(e)}")
-            return False
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-            print("数据库连接已关闭")
+            conn.close()
     
     def save_user_sessions(self, user_id, sessions):
         """保存用户的会话数据"""
@@ -176,93 +128,57 @@ class Database:
     def load_user_sessions(self, user_id):
         """加载用户的会话数据"""
         try:
-            conn = self.get_connection()
-            with conn.cursor(cursor_factory=DictCursor) as c:
-                c.execute("""
-                    SELECT session_id, title, chat_history, chat_context, 
-                           timestamp, is_favorite 
-                    FROM sessions 
-                    WHERE user_id = %s
-                    ORDER BY timestamp DESC
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT sessions FROM user_sessions WHERE user_id = ?
                 """, (user_id,))
+                result = cursor.fetchone()
                 
-                results = c.fetchall()
-                
-                # 将查询结果转换为字典格式
-                sessions = {}
-                for row in results:
-                    sessions[row['session_id']] = {
-                        'title': row['title'],
-                        'chat_history': row['chat_history'],
-                        'chat_context': row['chat_context'],
-                        'timestamp': row['timestamp'].isoformat() if row['timestamp'] else None,
-                        'is_favorite': row['is_favorite']
-                    }
-                
-                return sessions
+                if result and result[0]:
+                    return json.loads(result[0])
+                return None
         except Exception as e:
-            print(f"加载会话出错: {str(e)}")
-            return {}  # 返回空字典而不是 None
+            print(f"加载会话数据时出错: {str(e)}")
+            return None
+    
+    def save_user_settings(self, user_id, api_key, api_base, model):
+        """保存用户的API设置"""
+        try:
+            conn = self.get_connection()
+            c = conn.cursor()
+            
+            c.execute('''
+            INSERT OR REPLACE INTO user_settings (user_id, api_key, api_base, model)
+            VALUES (?, ?, ?, ?)
+            ''', (user_id, api_key, api_base, model))
+            
+            conn.commit()
+            return True, "设置保存成功"
+        except Exception as e:
+            return False, f"保存失败: {str(e)}"
         finally:
             conn.close()
     
-    def save_user_settings(self, user_id, settings):
-        """保存用户设置"""
-        conn = None
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO user_settings (user_id, api_key, api_base, model)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (user_id) 
-                DO UPDATE SET 
-                    api_key = EXCLUDED.api_key,
-                    api_base = EXCLUDED.api_base,
-                    model = EXCLUDED.model,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (user_id, settings.get('api_key'), settings.get('api_base'), settings.get('model')))
-            
-            conn.commit()
-            return True
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            print(f"保存用户设置时出错: {str(e)}")
-            return False
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-    
     def load_user_settings(self, user_id):
-        """加载用户设置"""
-        conn = None
+        """加载用户的API设置"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=DictCursor)
+            c = conn.cursor()
             
-            cursor.execute("""
-                SELECT api_key, api_base, model 
-                FROM user_settings 
-                WHERE user_id = %s
-            """, (user_id,))
+            c.execute('SELECT api_key, api_base, model FROM user_settings WHERE user_id = ?',
+                     (user_id,))
+            result = c.fetchone()
             
-            result = cursor.fetchone()
             if result:
-                return dict(result)
-            return {}
-            
-        except Exception as e:
-            print(f"加载用户设置时出错: {str(e)}")
-            return {}
+                return {
+                    'api_key': result[0],
+                    'api_base': result[1],
+                    'model': result[2]
+                }
+            return None
         finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+            conn.close()
     
     def verify_admin(self, user_id):
         """验证用户是否为管理员"""
@@ -331,37 +247,5 @@ class Database:
             return True, "管理员状态更新成功"
         except Exception as e:
             return False, f"更新失败: {str(e)}"
-        finally:
-            conn.close()
-    
-    def get_user_by_id(self, user_id):
-        """根据ID获取用户信息"""
-        try:
-            conn = self.get_connection()
-            with conn.cursor(cursor_factory=DictCursor) as c:
-                c.execute('SELECT id, username, is_admin FROM users WHERE id = %s', (user_id,))
-                result = c.fetchone()
-                return result
-        except Exception as e:
-            print(f"获取用户信息出错: {str(e)}")
-            return None
-        finally:
-            conn.close()
-    
-    def get_user_settings(self, user_id):
-        """获取用户设置"""
-        try:
-            conn = self.get_connection()
-            with conn.cursor(cursor_factory=DictCursor) as c:
-                c.execute("""
-                    SELECT api_key, api_base, model 
-                    FROM user_settings 
-                    WHERE user_id = %s
-                """, (user_id,))
-                result = c.fetchone()
-                return result if result else {}
-        except Exception as e:
-            print(f"获取用户设置出错: {str(e)}")
-            return {}
         finally:
             conn.close() 
