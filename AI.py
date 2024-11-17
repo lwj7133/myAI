@@ -154,6 +154,7 @@ if not st.session_state.user_id:
                     if login_username and login_password:
                         success, user_id = db.verify_user(login_username, login_password)
                         if success:
+                            # 设置基本会话状态
                             st.session_state.user_id = user_id
                             st.session_state.username = login_username
                             
@@ -162,6 +163,7 @@ if not st.session_state.user_id:
                             if saved_sessions:
                                 st.session_state.sessions = saved_sessions
                             else:
+                                # 初始化默认会话
                                 st.session_state.sessions = {
                                     'default': {
                                         'chat_history': [],
@@ -171,6 +173,7 @@ if not st.session_state.user_id:
                                         'is_favorite': False
                                     }
                                 }
+                                st.session_state.current_session_id = 'default'
                             
                             # 加载用户设置
                             settings = db.load_user_settings(user_id)
@@ -178,6 +181,22 @@ if not st.session_state.user_id:
                                 st.session_state.api_key = settings.get('api_key', "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6")
                                 st.session_state.api_base = settings.get('api_base', "https://api.tu-zi.com")
                                 st.session_state.model = settings.get('model', "gpt-4o")
+                            else:
+                                # 设置默认值
+                                st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6"
+                                st.session_state.api_base = "https://api.tu-zi.com"
+                                st.session_state.model = "gpt-4o"
+                            
+                            # 检查是否是管理员
+                            is_admin = db.verify_admin(user_id)
+                            st.session_state.is_admin = is_admin
+                            
+                            # 初始化显示默认值的标记
+                            st.session_state.show_default = {
+                                'api_key': True,
+                                'api_base': True,
+                                'model': True
+                            }
                             
                             st.rerun()
                         else:
@@ -218,7 +237,7 @@ if not st.session_state.user_id:
                             st.error("❌ 用户名不能包含中文字符")
                         # 验证用户名格式
                         elif not re.match(r'^[a-zA-Z0-9_]+$', reg_username):
-                            st.error("❌ 用户名只能包含英文字母、数字和下划线")
+                            st.error("❌ 用户名只能包含英文字母、数字和��划线")
                         # 验证密码长度
                         elif len(reg_password) < 6:
                             st.error("❌ 密码长度至少需要6个字符")
