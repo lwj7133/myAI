@@ -31,40 +31,6 @@ try:
 except Exception as e:
     st.error(f"初始化数据库表时出错: {str(e)}")
 
-# 在文件开头，数据库初始化后添加
-if db.test_connection():
-    st.sidebar.success("数据库连接成功！")
-else:
-    st.sidebar.error("数据库连接失败！")
-
-# 可以添加一个调试按钮
-if st.sidebar.button("测试数据库"):
-    # 测试数据库连接
-    if db.test_connection():
-        st.sidebar.success("数据库连接成功！")
-        
-        # 测试查询用户表
-        conn = db.get_connection()
-        with conn.cursor() as c:
-            c.execute('SELECT COUNT(*) FROM users')
-            user_count = c.fetchone()[0]
-            st.sidebar.write(f"用户总数: {user_count}")
-            
-            # 显示会话数据
-            c.execute('SELECT COUNT(*) FROM sessions')
-            session_count = c.fetchone()[0]
-            st.sidebar.write(f"会话总数: {session_count}")
-            
-            # 显示当前用户的会话
-            if st.session_state.get("user_id"):
-                c.execute('SELECT COUNT(*) FROM sessions WHERE user_id = %s', 
-                         (st.session_state.user_id,))
-                user_session_count = c.fetchone()[0]
-                st.sidebar.write(f"当前用户会话数: {user_session_count}")
-        conn.close()
-    else:
-        st.sidebar.error("数据库连接失败！")
-
 # 设置页面配置，使用机器人emoji作为图标
 st.set_page_config(
     page_title="Cookie-AI智能助手",
@@ -395,7 +361,7 @@ with st.sidebar:
         
         col1, col2 = st.columns([1, 1])
         with col1:
-            submit_button = st.form_submit_button("��存新设置", use_container_width=True)
+            submit_button = st.form_submit_button("保存新设置", use_container_width=True)
         with col2:
             reset_button = st.form_submit_button("恢复默认设置", use_container_width=True)
         
