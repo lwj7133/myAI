@@ -162,6 +162,10 @@ if not st.session_state.user_id:
                             saved_sessions = db.load_user_sessions(user_id)
                             if saved_sessions:
                                 st.session_state.sessions = saved_sessions
+                                # 设置当前会话ID为最新的会话
+                                latest_session = max(saved_sessions.items(), 
+                                                  key=lambda x: x[1]['timestamp'])
+                                st.session_state.current_session_id = latest_session[0]
                             else:
                                 # 初始化默认会话
                                 st.session_state.sessions = {
@@ -237,7 +241,7 @@ if not st.session_state.user_id:
                             st.error("❌ 用户名不能包含中文字符")
                         # 验证用户名格式
                         elif not re.match(r'^[a-zA-Z0-9_]+$', reg_username):
-                            st.error("❌ 用户名只能包含英文字母、数字和��划线")
+                            st.error("❌ 用户名只能包含英文字母、数字和划线")
                         # 验证密码长度
                         elif len(reg_password) < 6:
                             st.error("❌ 密码长度至少需要6个字符")
@@ -767,18 +771,25 @@ if chat_submit_button:
 
 # 处理清空聊天按钮
 if clear_button:
-    new_session_id = f"会话_{len(st.session_state.sessions)}"
+    new_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # 打印当前会话数量
+    st.write(f"当前会话数量: {len(st.session_state.sessions)}")
+    
+    # 添加新会话
     st.session_state.sessions[new_session_id] = {
         'chat_history': [],
         'chat_context': [],
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'title': '新会话'
+        'title': '新会话',
+        'is_favorite': False
     }
+    
+    # 打印更新后的会话数量
+    st.write(f"添加新会话后数量: {len(st.session_state.sessions)}")
+    
     st.session_state.current_session_id = new_session_id
-    
-    # 保存会话数据
     db.save_user_sessions(st.session_state.user_id, st.session_state.sessions)
-    
     st.rerun()
 
 # 添加声明
