@@ -290,11 +290,41 @@ class Database:
                     SELECT api_key, api_base, model 
                     FROM user_settings 
                     WHERE user_id = %s
-                """, (user_id,))
+                """， (user_id,))
                 result = c.fetchone()
                 return result if result else {}
         except Exception as e:
             print(f"获取用户设置出错: {str(e)}")
             return {}
         finally:
-            conn.close() 
+            conn.close()
+    
+    def test_connection(self):
+        """测试数据库连接"""
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as c:
+                # 测试查询
+                c.execute('SELECT version()')
+                version = c.fetchone()
+                print("数据库连接成功!")
+                print(f"PostgreSQL 版本: {version[0]}")
+                
+                # 测试表是否存在
+                c.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                """)
+                tables = c.fetchall()
+                print("\n现有数据表:")
+                for table in tables:
+                    print(f"- {table[0]}")
+                
+                return True
+        except Exception as e:
+            print(f"数据库连接错误: {str(e)}")
+            return False
+        finally:
+            if 'conn' in locals():
+                conn.close() 
