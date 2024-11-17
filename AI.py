@@ -6,9 +6,42 @@ import streamlit as st
 from datetime import datetime, timedelta
 from database import Database
 import bcrypt
+import sys
+
+# 显示Python版本和环境信息
+st.sidebar.write(f"Python 版本: {sys.version}")
 
 # 初始化数据库
-db = Database()
+try:
+    db = Database()
+    st.sidebar.info("数据库实例已创建")
+except Exception as e:
+    st.sidebar.error(f"创建数据库实例失败: {str(e)}")
+    st.stop()
+
+# 添加数据库测试按钮
+if st.sidebar.button("测试数据库连接"):
+    try:
+        if db.test_connection():
+            st.sidebar.success("✅ 数据库连接成功！")
+            
+            # 测试数据库操作
+            conn = db.get_connection()
+            with conn.cursor() as c:
+                # 测试用户表
+                c.execute("SELECT COUNT(*) FROM users")
+                user_count = c.fetchone()[0]
+                st.sidebar.write(f"用户表中的记录数: {user_count}")
+                
+                # 测试会话表
+                c.execute("SELECT COUNT(*) FROM sessions")
+                session_count = c.fetchone()[0]
+                st.sidebar.write(f"会话表中的记录数: {session_count}")
+            conn.close()
+        else:
+            st.sidebar.error("❌ 数据库连接失败！")
+    except Exception as e:
+        st.sidebar.error(f"测试连接时出错: {str(e)}")
 
 # 确保所需的表都已创建
 try:
