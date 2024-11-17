@@ -10,6 +10,27 @@ import bcrypt
 # 初始化数据库
 db = Database()
 
+# 确保所需的表都已创建
+try:
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            user_id INTEGER,
+            sessions TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    
+    # 提交事务并关闭连接
+    conn.commit()
+    conn.close()
+except Exception as e:
+    st.error(f"初始化数据库表时出错: {str(e)}")
+
 # 设置页面配置，使用机器人emoji作为图标
 st.set_page_config(
     page_title="Cookie-AI智能助手",
