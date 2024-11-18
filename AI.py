@@ -8,7 +8,6 @@ from database import Database
 import bcrypt
 import pandas as pd
 import io
-from config import DEFAULT_API_KEY, DEFAULT_API_BASE, DEFAULT_MODEL
 
 # 初始化数据库
 db = Database()
@@ -224,14 +223,14 @@ if not st.session_state.user_id:
                             # 加载用户设置
                             settings = db.load_user_settings(user_id)
                             if settings:
-                                st.session_state.api_key = settings.get('api_key', DEFAULT_API_KEY)
-                                st.session_state.api_base = settings.get('api_base', DEFAULT_API_BASE)
-                                st.session_state.model = settings.get('model', DEFAULT_MODEL)
+                                st.session_state.api_key = settings.get('api_key', "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6")
+                                st.session_state.api_base = settings.get('api_base', "https://api.tu-zi.com")
+                                st.session_state.model = settings.get('model', "gpt-4o-all")
                             else:
                                 # 设置默认值
-                                st.session_state.api_key = DEFAULT_API_KEY
-                                st.session_state.api_base = DEFAULT_API_BASE
-                                st.session_state.model = DEFAULT_MODEL
+                                st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6"
+                                st.session_state.api_base = "https://api.tu-zi.com"
+                                st.session_state.model = "gpt-4o-all"
                             
                             # 检查是否是管理员
                             is_admin = db.verify_admin(user_id)
@@ -312,11 +311,11 @@ if not st.session_state.user_id:
 
 # 在用户认证相关代码之后，API设置部分之前添加这些变量的初始化
 if 'api_key' not in st.session_state:
-    st.session_state.api_key = DEFAULT_API_KEY
+    st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6"  # default_api_key
 if 'api_base' not in st.session_state:
-    st.session_state.api_base = DEFAULT_API_BASE
+    st.session_state.api_base = "https://api.tu-zi.com"  # default_api_base
 if 'model' not in st.session_state:
-    st.session_state.model = DEFAULT_MODEL
+    st.session_state.model = "gpt-4o-all"  # 修改默认模型为 gpt-4o-all
 if 'show_default' not in st.session_state:
     st.session_state.show_default = {'api_key': True, 'api_base': True, 'model': True}
 
@@ -369,9 +368,12 @@ with st.sidebar:
             ("Claude-claude-3-5-sonnet-20241022", "———Sonnet 10 | 原生"),
             ("o1-mini-all", "———深度推理 | o1轻量"),
             ("o1-preview-all", "———深度推理 | o1预览版"),
-            ("dall-e-3", "———DALL-E 3 | 图像生成"),
             ("o1-preview", "———深度推理 | o1预览版"),
             ("o1-mini", "———深度推理 | o1快速版"),
+            ("dall-e-3", "———DALL-E 3 | 图像生成"),
+            ("ideogram", "———Ideogram | 图像生成"),
+            ("midjourney", "———Midjourney | 图像生成"),
+            ("suno-v3.5", "———Suno | 音乐生成"),
             ("gpt-4-gizmo-g-bo0FiWLY7", "———Consensus科研文献"),
             ("gpt-4-gizmo-g-pmuQfob8d-image-generator", "———图像生成"),
             ("gpt-4-gizmo-g-NgAcklHd8-scispace", "———SciSpace科研助手"),
@@ -395,8 +397,8 @@ with st.sidebar:
             reset_button = st.form_submit_button("恢复默认设置", use_container_width=True)
         
         if submit_button:
-            st.session_state.api_key = DEFAULT_API_KEY if api_key == "默认" else api_key
-            st.session_state.api_base = DEFAULT_API_BASE if api_base == "默认" else api_base
+            st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6" if api_key == "默认" else api_key
+            st.session_state.api_base = "https://api.tu-zi.com" if api_base == "默认" else api_base
             st.session_state.model = model
             st.session_state.show_default = {
                 'api_key': api_key == "默认",
@@ -413,9 +415,9 @@ with st.sidebar:
             st.success("API设置已更新")
         
         if reset_button:
-            st.session_state.api_key = DEFAULT_API_KEY
-            st.session_state.api_base = DEFAULT_API_BASE
-            st.session_state.model = DEFAULT_MODEL
+            st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6"
+            st.session_state.api_base = "https://api.tu-zi.com"
+            st.session_state.model = "gpt-4o-all"
             st.session_state.show_default = {'api_key': True, 'api_base': True, 'model': True}
             # 保存默认设置
             db.save_user_settings(
@@ -437,8 +439,10 @@ with st.sidebar:
 
 # 主要内容移到主区域
 st.markdown("""
-    # 🤖 Cookie-AI多模态智能助手
-    #### ✅连续对话 | 📄文件解析 | 🌐实时联网 | 📝文档生成 | 🎨图像处理 
+    <div style="text-align: center;">
+        <h1>🤖 Cookie-AI多模态智能助手</h1>
+        <h4>✅连续对话 | 📄文件解析 | 🌐实时联网 | 📝文档生成 | 🎨图像处理</h4>
+    </div>
 """, unsafe_allow_html=True)
 
 # 在初始化聊天历史和上下文的部分之前添加
@@ -975,7 +979,7 @@ if clear_button:
 st.markdown(
     """
     <div style="background-color: #E6F3FF; padding: 10px; border-radius: 5px; color: #003366;">
-    ⚠️ <strong>温馨提示：</strong> 根据 Streamlit Cloud 的特性，应用超过7天未使用，数据可能会擦除，请及时保存重要数据。
+    ⚠️ <strong>温馨提示：</strong> 由于系统维护和休眠机制，应用超过7天未使用，数据可能会被擦除，请及时保存重要数据。
     </div>
     """,
     unsafe_allow_html=True
