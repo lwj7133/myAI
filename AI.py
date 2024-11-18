@@ -6,6 +6,8 @@ import streamlit as st
 from datetime import datetime, timedelta
 from database import Database
 import bcrypt
+import pandas as pd
+import io
 
 # 初始化数据库
 db = Database()
@@ -140,8 +142,14 @@ if not st.session_state.user_id:
         #st.markdown('<div class="login-container">', unsafe_allow_html=True)
         st.markdown("""
             <div class="login-header">
-                <h2>🤖 Cookie-AI智能助手</h2>
-                <p>欢迎使用，请登录或注册以开始对话</p>
+                <h1 style="font-size: 2.5em">🤖 Cookie-AI</h1>
+                <p style="font-size: 1.2em">
+                    <span style="font-size:1.4em">✅</span> 连续对话 | 
+                    <span style="font-size:1.4em">📄</span> 文件解析 | 
+                    <span style="font-size:1.4em">🌐</span> 实时联网 | 
+                    <span style="font-size:1.4em">📝</span> 文档生成 | 
+                    <span style="font-size:1.4em">🎨</span> 图像处理
+                </p>
             </div>
         """, unsafe_allow_html=True)
         
@@ -183,10 +191,22 @@ if not st.session_state.user_id:
                             saved_sessions = db.load_user_sessions(user_id)
                             if saved_sessions:
                                 st.session_state.sessions = saved_sessions
-                                # 设置当前会话ID为最新的会话
-                                latest_session = max(saved_sessions.items(), 
-                                                  key=lambda x: x[1]['timestamp'])
-                                st.session_state.current_session_id = latest_session[0]
+                                # 检查最新会话是否为空会话
+                                latest_session = max(saved_sessions.items(), key=lambda x: x[1]['timestamp'])
+                                if not latest_session[1]['chat_history']:
+                                    # 如果最新会话是空会话，直接使用它
+                                    st.session_state.current_session_id = latest_session[0]
+                                else:
+                                    # 如果最新会话不是空会话，创建一个新的空会话
+                                    new_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                                    st.session_state.sessions[new_session_id] = {
+                                        'chat_history': [],
+                                        'chat_context': [],
+                                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        'title': '新会话',
+                                        'is_favorite': False
+                                    }
+                                    st.session_state.current_session_id = new_session_id
                             else:
                                 # 初始化默认会话
                                 st.session_state.sessions = {
@@ -205,12 +225,12 @@ if not st.session_state.user_id:
                             if settings:
                                 st.session_state.api_key = settings.get('api_key', "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6")
                                 st.session_state.api_base = settings.get('api_base', "https://api.tu-zi.com")
-                                st.session_state.model = settings.get('model', "gpt-4o")
+                                st.session_state.model = settings.get('model', "gpt-4o-all")
                             else:
                                 # 设置默认值
                                 st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6"
                                 st.session_state.api_base = "https://api.tu-zi.com"
-                                st.session_state.model = "gpt-4o"
+                                st.session_state.model = "gpt-4o-all"
                             
                             # 检查是否是管理员
                             is_admin = db.verify_admin(user_id)
@@ -295,7 +315,7 @@ if 'api_key' not in st.session_state:
 if 'api_base' not in st.session_state:
     st.session_state.api_base = "https://api.tu-zi.com"  # default_api_base
 if 'model' not in st.session_state:
-    st.session_state.model = "gpt-4o"  # default_model
+    st.session_state.model = "gpt-4o-all"  # 修改默认模型为 gpt-4o-all
 if 'show_default' not in st.session_state:
     st.session_state.show_default = {'api_key': True, 'api_base': True, 'model': True}
 
@@ -334,28 +354,39 @@ with st.sidebar:
         
         # 使用下拉选择框替代文本输入框
         available_models = [
-            "gpt-4o-all",
-            "gpt-4o",
-            "gpt-4o-mini",
-            "claude-3-5-sonnet-20240620",
-            "claude-3-5-sonnet-20240620-fast",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-20241022-fast",
-            "claude-3-5-haiku-20241022-fast",
-            "openai-gpt-4o",
-            "OpenAI-gpt-4o",
-            "Claude-claude-3-5-sonnet-20240620",
-            "Claude-claude-3-5-sonnet-20241022",
-            "o1-mini-all",
-            "o1-preview-all",
-            "openai-dall-e-3",
-            "o1-preview-fast",
-            "o1-mini-fast",
+            ("gpt-4o-all", "———全能版 | 联网、代码、文件、图像"),
+            ("gpt-4o", "———基础版 | 日常任务"),
+            ("gpt-4o-mini", "———轻量版 | 快速响应"),
+            ("claude-3-5-sonnet-20240620", "———代码突出 | 强大理解"),
+            ("claude-3-5-sonnet-20240620-fast", "———代码突出 | 快速版"),
+            ("claude-3-5-sonnet-20241022", "———代码突出 | 最新版"),
+            ("claude-3-5-sonnet-20241022-fast", "———代码突出 | 快速版"),
+            ("claude-3-5-haiku-20241022-fast", "———Haiku | 轻量快速"),
+            ("openai-gpt-4o", "———GPT-4 | 原生接口"),
+            ("OpenAI-gpt-4o", "———GPT-4 | 备用接口"),
+            ("Claude-claude-3-5-sonnet-20240620", "———Sonnet 06 | 原生"),
+            ("Claude-claude-3-5-sonnet-20241022", "———Sonnet 10 | 原生"),
+            ("o1-mini-all", "———深度推理 | o1轻量"),
+            ("o1-preview-all", "———深度推理 | o1预览版"),
+            ("o1-preview", "———深度推理 | o1预览版"),
+            ("o1-mini", "———深度推理 | o1快速版"),
+            ("dall-e-3", "———DALL-E 3 | 图像生成"),
+            ("ideogram", "———Ideogram | 图像生成"),
+            ("midjourney", "———Midjourney | 图像生成"),
+            ("suno-v3.5", "———Suno | 音乐生成"),
+            ("gpt-4-gizmo-g-bo0FiWLY7", "———Consensus科研文献"),
+            ("gpt-4-gizmo-g-pmuQfob8d-image-generator", "———图像生成"),
+            ("gpt-4-gizmo-g-NgAcklHd8-scispace", "———SciSpace科研助手"),
+            ("gpt-4-gizmo-g-B3hgivKK9-write-for-me", "———WriteForMe写作助手"),
+            ("gpt-4-gizmo-g-gFt1ghYJl-logo-creator", "———Logo设计"),
+            ("gpt-4-gizmo-g-Lq7UjNxjV-lun-wen-xie-shou", "———论文写手"),
+            ("gpt-4-gizmo-g-RfusSJbgM-chao-ji-pptsheng-cheng-super-ppt", "———SuperPPT生成")
         ]
         model = st.selectbox(
             "模型名称",
-            options=available_models,
-            index=available_models.index(st.session_state.model) if st.session_state.model in available_models else 0,
+            options=[m[0] for m in available_models],
+            format_func=lambda x: f"{x} ({dict(available_models)[x]})",
+            index=[m[0] for m in available_models].index(st.session_state.model) if st.session_state.model in [m[0] for m in available_models] else 0,
             key="model_input"
         )
         
@@ -372,7 +403,7 @@ with st.sidebar:
             st.session_state.show_default = {
                 'api_key': api_key == "默认",
                 'api_base': api_base == "默认",
-                'model': model == "gpt-4o"
+                'model': model == "gpt-4o-all"
             }
             # 保存用户设置
             db.save_user_settings(
@@ -386,7 +417,7 @@ with st.sidebar:
         if reset_button:
             st.session_state.api_key = "sk-1xOLoJ1NRluWwc5oC5Cc8f32E8D940C791AdEb8b656bD4C6"
             st.session_state.api_base = "https://api.tu-zi.com"
-            st.session_state.model = "gpt-4o"
+            st.session_state.model = "gpt-4o-all"
             st.session_state.show_default = {'api_key': True, 'api_base': True, 'model': True}
             # 保存默认设置
             db.save_user_settings(
@@ -408,8 +439,8 @@ with st.sidebar:
 
 # 主要内容移到主区域
 st.markdown("""
-    # 🤖 Cookie-AI智能助手
-    #### ✅连续对话 | 🌐实时联网 | 🎯精准回答
+    # 🤖 Cookie-AI多模态智能助手
+    #### ✅连续对话 | 📄文件解析 | 🌐实时联网 | 📝文档生成 | 🎨图像处理 
 """, unsafe_allow_html=True)
 
 # 在初始化聊天历史和上下文的部分之前添加
@@ -566,6 +597,17 @@ def simplify_context(context, max_messages=7):
     
     return simplified
 
+# 在文件开头添加特殊模型的提示词映射
+SPECIAL_MODELS_PROMPTS = {
+    "gpt-4-gizmo-g-bo0FiWLY7": "",  # 使用空字符串表示不需要系统提示词
+    "gpt-4-gizmo-g-pmuQfob8d-image-generator": "",
+    "gpt-4-gizmo-g-NgAcklHd8-scispace": "",
+    "gpt-4-gizmo-g-B3hgivKK9-write-for-me": "",
+    "gpt-4-gizmo-g-gFt1ghYJl-logo-creator": "",
+    "gpt-4-gizmo-g-Lq7UjNxjV-lun-wen-xie-shou": "",
+    "gpt-4-gizmo-g-RfusSJbgM-chao-ji-pptsheng-cheng-super-ppt": ""
+}
+
 def stream_api_call(context):
     """调用API并流式返回响应"""
     headers = {
@@ -575,7 +617,8 @@ def stream_api_call(context):
     
     simplified_context = simplify_context(context)
     
-    if simplified_context[0]["role"] != "system":
+    # 检查是否是特殊模型，如果不是才添加系统提示词
+    if model_to_use not in SPECIAL_MODELS_PROMPTS and simplified_context[0]["role"] != "system":
         simplified_context.insert(0, {"role": "system", "content": system_message})
     
     data = {
@@ -654,6 +697,7 @@ def process_document(file):
     import PyPDF2
     from PIL import Image
     import base64
+    import pandas as pd
     
     # 检查文件大小（50MB限制）
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB in bytes
@@ -664,8 +708,61 @@ def process_document(file):
     file_extension = file.name.lower().split('.')[-1]
     
     try:
+        # 处理Excel文件
+        if file_extension in ['xlsx', 'xls']:
+            df = pd.read_excel(file)
+            # 获取基本信息
+            info = {
+                'total_rows': len(df),
+                'total_columns': len(df.columns),
+                'column_names': list(df.columns),
+                'data_types': df.dtypes.to_dict(),
+                'preview': df.head().to_string(),
+                'description': df.describe().to_string(),
+                'missing_values': df.isnull().sum().to_dict()
+            }
+            return {
+                'type': 'excel',
+                'data': info,
+                'raw_df': df
+            }
+            
+        # 处理CSV文件
+        elif file_extension == 'csv':
+            # 尝试不同的编码方式读取CSV
+            encodings = ['utf-8', 'gbk', 'gb2312', 'iso-8859-1']
+            df = None
+            
+            for encoding in encodings:
+                try:
+                    df = pd.read_csv(io.StringIO(file.getvalue().decode(encoding)))
+                    break
+                except UnicodeDecodeError:
+                    continue
+                except Exception as e:
+                    continue
+            
+            if df is not None:
+                info = {
+                    'total_rows': len(df),
+                    'total_columns': len(df.columns),
+                    'column_names': list(df.columns),
+                    'data_types': df.dtypes.to_dict(),
+                    'preview': df.head().to_string(),
+                    'description': df.describe().to_string(),
+                    'missing_values': df.isnull().sum().to_dict()
+                }
+                return {
+                    'type': 'csv',
+                    'data': info,
+                    'raw_df': df
+                }
+            else:
+                st.error("无法读取CSV文件，请检查文件编码格式。")
+                return None
+                
         # 处理代码文件 - 添加html相关文件类型
-        if file_extension in ['py', 'c', 'cpp', 'h', 'hpp', 'm', 'swift', 'java', 'js', 'ts','html', 'htm', 'css', 'scss', 'less', 'jsx', 'tsx', 'vue', 'php']:  # 添加web文件类型
+        elif file_extension in ['py', 'c', 'cpp', 'h', 'hpp', 'm', 'swift', 'java', 'js', 'ts','html', 'htm', 'css', 'scss', 'less', 'jsx', 'tsx', 'vue', 'php']:  # 添加web文件类型
             code_content = file.getvalue().decode('utf-8')
             return code_content
             
@@ -721,9 +818,9 @@ with st.form(key="chat_form", clear_on_submit=True):
     uploaded_file = st.file_uploader(
         "上传文件（小于50MB）", 
         type=["png", "jpg", "jpeg", "pdf", "doc", "docx", "py", "c", "cpp", "h", "hpp", "m", "swift", "java", "js", "ts",
-              "html", "htm", "css", "scss", "less", "jsx", "tsx", "vue", "php"],  # 添加web相关文件类型
+              "html", "htm", "css", "scss", "less", "jsx", "tsx", "vue", "php", "xlsx", "xls", "csv"],  # 添加Excel和CSV支持
         key="file_uploader",
-        help="支持的文件类型：图片(PNG/JPG)、文档(PDF/DOC/DOCX)、代码文件(PY/C/CPP/H/M等)、网页文件(HTML/CSS/JS等)"
+        help="支持的文件类型：图片(PNG/JPG)、文档(PDF/DOC/DOCX)、代码文件(PY/C/CPP/H/M等)、网页文件(HTML/CSS/JS等)、表格文件（xlsx/xls/csv）"
     )
     st.markdown('<style>div[data-testid="stFileUploader"] {margin-bottom: -15px;}</style>', unsafe_allow_html=True)
 
@@ -742,7 +839,64 @@ if chat_submit_button:
         if uploaded_file:
             file_extension = uploaded_file.name.lower().split('.')[-1]
             
-            if file_extension in ['png', 'jpg', 'jpeg']:
+            # 处理Excel和CSV文件
+            if file_extension in ['xlsx', 'xls', 'csv']:
+                data_content = process_document(uploaded_file)
+                if data_content and isinstance(data_content, dict):
+                    info = data_content['data']
+                    
+                    # 构建提示信息
+                    prompt = f"""请分析以下{file_extension.upper()}文件数据：
+
+基本信息：
+- 总行数：{info['total_rows']}
+- 总列数：{info['total_columns']}
+- 列名：{', '.join(info['column_names'])}
+
+数据预览：
+{info['preview']}
+
+数据描述：
+{info['description']}
+
+缺失值统计：
+{json.dumps(info['missing_values'], indent=2)}
+"""
+                    if user_input:
+                        prompt += f"\n用户的具体问题是：{user_input}"
+                    else:
+                        prompt += """
+请对数据进行以下分析：
+1. 数据概览和基本统计信息
+2. 数据质量评估（包括缺失值、异常值等）
+3. 主要特征之间的关系
+4. 数据的潜在问题和改进建议
+"""
+                    
+                    # 保存到会话历史
+                    st.session_state.sessions[st.session_state.current_session_id]['chat_history'].append({
+                        'type': 'data_analysis',
+                        'filename': uploaded_file.name,
+                        'file_type': file_extension,
+                        'data_info': {
+                            'total_rows': info['total_rows'],
+                            'total_columns': info['total_columns'],
+                            'column_names': info['column_names'],
+                            'preview': info['preview'][:1000],  # 限制预览数据大小
+                            'description': info['description']
+                        },
+                        'user_input': user_input if user_input else ''
+                    })
+                    
+                    st.session_state.sessions[st.session_state.current_session_id]['chat_context'].append({
+                        "role": "user", 
+                        "content": prompt
+                    })
+                    
+                    # 立即保存会话到数据库
+                    db.save_user_sessions(st.session_state.user_id, st.session_state.sessions)
+                    
+            elif file_extension in ['png', 'jpg', 'jpeg']:
                 image_base64 = process_document(uploaded_file)
                 image_url = f"data:image/jpeg;base64,{image_base64}"
                 # 修改存储方式，保存文件名和base64数据
@@ -758,41 +912,6 @@ if chat_submit_button:
                         {"type": "image_url", "image_url": {"url": image_url}}
                     ]
                 })
-            elif file_extension in ['py', 'c', 'cpp', 'h', 'hpp', 'm', 'swift', 'java', 'js', 'ts',
-                                   'html', 'htm', 'css', 'scss', 'less', 'jsx', 'tsx', 'vue', 'php']:  # 添加web文件类型
-                code_content = process_document(uploaded_file)
-                if code_content:
-                    # 根据文件类型选择合适的语言标识符
-                    lang_identifier = {
-                        'html': 'html',
-                        'htm': 'html',
-                        'css': 'css',
-                        'scss': 'scss',
-                        'less': 'less',
-                        'js': 'javascript',
-                        'jsx': 'jsx',
-                        'tsx': 'tsx',
-                        'vue': 'vue',
-                        'php': 'php'
-                    }.get(file_extension, file_extension)
-                    
-                    prompt = f"""请分析以下{file_extension.upper()}代码：\n\n```{lang_identifier}\n{code_content}\n```\n\n"""
-                    if user_input:
-                        prompt += f"用户的具体问题是：{user_input}"
-                    else:
-                        prompt += "请分析代码的主要功能、结构和可能存在的问题，并提供改进建议。"
-                    
-                    # 保存到会话历史
-                    st.session_state.sessions[st.session_state.current_session_id]['chat_history'].append({
-                        'type': 'document',
-                        'filename': uploaded_file.name,
-                        'content': code_content,
-                        'user_input': user_input if user_input else ''
-                    })
-                    st.session_state.sessions[st.session_state.current_session_id]['chat_context'].append({
-                        "role": "user", 
-                        "content": prompt
-                    })
             else:
                 document_content = process_document(uploaded_file)
                 if document_content:
@@ -951,10 +1070,7 @@ with st.sidebar:
                                     )
                                     st.session_state.current_session_id = remaining_sessions[0][0]
                                 db.save_user_sessions(st.session_state.user_id, st.session_state.sessions)
-                                st.rerun()
-                
-                # 在每个日期分组后添加一个分隔线
-                st.markdown("---")
+                                st.rerun()               
     
     with tab2:
         # 获取收藏的会话
