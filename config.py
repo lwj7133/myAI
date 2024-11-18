@@ -1,17 +1,11 @@
-import os
-from dotenv import load_dotenv
+import streamlit as st
 
-# 加载.env文件
-load_dotenv()
-
-# 管理员账户设置
-ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
-
-# API默认设置
-DEFAULT_API_KEY = os.getenv('DEFAULT_API_KEY')
-DEFAULT_API_BASE = os.getenv('DEFAULT_API_BASE')
-DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'gpt-4o-all')
+# 从 Streamlit Secrets 获取配置
+ADMIN_USERNAME = st.secrets["ADMIN_USERNAME"]
+ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
+DEFAULT_API_KEY = st.secrets["DEFAULT_API_KEY"]
+DEFAULT_API_BASE = st.secrets["DEFAULT_API_BASE"]
+DEFAULT_MODEL = st.secrets["DEFAULT_MODEL"]
 
 # 添加数据库配置
 DB_CONFIG = {
