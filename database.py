@@ -2,6 +2,7 @@ import sqlite3
 import bcrypt
 from datetime import datetime
 import json
+from config import ADMIN_USERNAME, ADMIN_PASSWORD
 
 class Database:
     def __init__(self, db_file="chat_app.db"):
@@ -54,14 +55,14 @@ class Database:
         ''')
         
         # 检查是否存在默认管理员账户
-        c.execute('SELECT 1 FROM users WHERE username = "admin"')
+        c.execute('SELECT 1 FROM users WHERE username = ?', (ADMIN_USERNAME,))
         if not c.fetchone():
-            # 创建默认管理员账户，密码为 "admin123"
-            hashed = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt())
+            # 创建默认管理员账户
+            hashed = bcrypt.hashpw(ADMIN_PASSWORD.encode('utf-8'), bcrypt.gensalt())
             c.execute('''
             INSERT INTO users (username, password, is_admin)
             VALUES (?, ?, 1)
-            ''', ("admin", hashed.decode('utf-8')))
+            ''', (ADMIN_USERNAME, hashed.decode('utf-8')))
         
         conn.commit()
         conn.close()
