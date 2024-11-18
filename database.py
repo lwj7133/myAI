@@ -109,8 +109,46 @@ class Database:
     def save_user_sessions(self, user_id, sessions):
         """保存用户的会话数据"""
         try:
-            # 将会话数据转换为JSON字符串
-            sessions_json = json.dumps(sessions, ensure_ascii=False)
+            # 预处理会话数据，确保可以序列化
+            processed_sessions = {}
+            for session_id, session_data in sessions.items():
+                processed_session = {
+                    'title': session_data.get('title', '新会话'),
+                    'timestamp': session_data.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                    'is_favorite': session_data.get('is_favorite', False),
+                    'chat_history': [],
+                    'chat_context': session_data.get('chat_context', [])
+                }
+                
+                # 处理聊天历史
+                for msg in session_data.get('chat_history', []):
+                    if isinstance(msg, dict):
+                        # 对于数据分析类型的消息，确保数据大小合理
+                        if msg.get('type') == 'data_analysis':
+                            processed_msg = {
+                                'type': 'data_analysis',
+                                'filename': msg.get('filename', ''),
+                                'file_type': msg.get('file_type', ''),
+                                'data_info': {
+                                    'total_rows': msg.get('data_info', {}).get('total_rows', 0),
+                                    'total_columns': msg.get('data_info', {}).get('total_columns', 0),
+                                    'column_names': msg.get('data_info', {}).get('column_names', []),
+                                    'preview': msg.get('data_info', {}).get('preview', '')[:1000],  # 限制预览数据大小
+                                    'description': msg.get('data_info', {}).get('description', '')[:1000]  # 限制描述数据大小
+                                },
+                                'user_input': msg.get('user_input', '')
+                            }
+                            processed_session['chat_history'].append(processed_msg)
+                        else:
+                            # 其他类型的消息保持不变
+                            processed_session['chat_history'].append(msg)
+                    else:
+                        processed_session['chat_history'].append(msg)
+                
+                processed_sessions[session_id] = processed_session
+            
+            # 将处理后的会话数据转换为JSON字符串
+            sessions_json = json.dumps(processed_sessions, ensure_ascii=False)
             
             # 更新数据库中的会话数据
             with self.get_connection() as conn:
