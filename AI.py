@@ -366,10 +366,13 @@ with st.sidebar:
             ("OpenAI-gpt-4o", "———GPT-4 | 备用接口"),
             ("Claude-claude-3-5-sonnet-20240620", "———Sonnet 06 | 原生"),
             ("Claude-claude-3-5-sonnet-20241022", "———Sonnet 10 | 原生"),
+            ("gemini-2.0-flash-exp", "———gemini-2.0-flash-exp"),
             ("o1-mini-all", "———深度推理 | o1轻量"),
-            ("o1-preview-all", "———深度推理 | o1预览版"),
-            ("o1-preview", "———深度推理 | o1预览版"),
+            ("o1-all", "———深度推理 | o1预览版"),
+            ("o1", "———深度推理 | o1"),
             ("o1-mini", "———深度推理 | o1快速版"),
+            ("o1-pro", "———深度推理 | o1"),
+            ("o1-pro-all", "———深度推理 | o1"),
             ("dall-e-3", "———DALL-E 3 | 图像生成"),
             ("ideogram", "———Ideogram | 图像生成"),
             ("midjourney", "———Midjourney | 图像生成"),
@@ -607,7 +610,11 @@ SPECIAL_MODELS_PROMPTS = {
     "gpt-4-gizmo-g-B3hgivKK9-write-for-me": "",
     "gpt-4-gizmo-g-gFt1ghYJl-logo-creator": "",
     "gpt-4-gizmo-g-Lq7UjNxjV-lun-wen-xie-shou": "",
-    "gpt-4-gizmo-g-RfusSJbgM-chao-ji-pptsheng-cheng-super-ppt": ""
+    "gpt-4-gizmo-g-RfusSJbgM-chao-ji-pptsheng-cheng-super-ppt": "",
+    "o1-all": "",
+    "o1-pro-all": "",
+    "o1": "",
+    "o1-pro": ""
 }
 
 def stream_api_call(context):
@@ -620,8 +627,8 @@ def stream_api_call(context):
     simplified_context = simplify_context(context)
     
     # 检查是否是特殊模型，如果不是才添加系统提示词
-    if model_to_use not in SPECIAL_MODELS_PROMPTS and simplified_context[0]["role"] != "system":
-        simplified_context.insert(0, {"role": "system", "content": system_message})
+    # if model_to_use not in SPECIAL_MODELS_PROMPTS and simplified_context[0]["role"] != "system":
+    #     simplified_context.insert(0, {"role": "system", "content": system_message})
     
     data = {
         "model": model_to_use,
